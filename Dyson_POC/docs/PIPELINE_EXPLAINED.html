@@ -1,0 +1,1242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DFM Analysis — How It Works</title>
+
+<style>
+  :root {
+    --violet: #440099;
+    --violet-deep: #330072;
+    --violet-tint: #F3EEFA;
+    --blue: #0057B8;
+    --blue-tint: #E8F0FA;
+
+    --red: #A6192E;   --red-tint: #F9E9EC;
+    --amber: #8A6400; --amber-tint: #FCF4DE;
+    --green: #006B31; --green-tint: #E6F3EC;
+    --grey: #565E6B;  --grey-tint: #F1F2F5;
+
+    --paper: #FFFFFF;
+    --panel: #FFFFFF;
+    --surface: #F8F6FB;
+    --surface-2: #F1EDF7;
+    --border: #E3DEEE;
+    --ink: #041E42;
+    --ink-muted: #5A6478;
+    --ink-faint: #8A90A0;
+
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+            Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+            "Liberation Mono", monospace;
+
+    --measure: 66ch;
+    --radius: 14px;
+  }
+
+  /* This deck is presented on projectors and printed to hand out, so it commits
+     to one light identity rather than following the viewer's theme: a dark
+     variant would be unreadable in a lit meeting room and would waste toner.
+     The Pantone accents are chosen against white and stay put. */
+
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .deck {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ---------- Slide shell ---------- */
+
+  .slide {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 44px 48px 46px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .slide-index {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--violet);
+    font-weight: 600;
+  }
+
+  .slide h2 {
+    margin: 0;
+    font-size: clamp(24px, 3vw, 32px);
+    line-height: 1.15;
+    letter-spacing: -0.022em;
+    font-weight: 700;
+    text-wrap: balance;
+    max-width: 26ch;
+  }
+
+  .lede { margin: 0; font-size: 17px; color: var(--ink-muted); max-width: var(--measure); }
+  .slide p { max-width: var(--measure); }
+
+  /* ---------- Title slide ---------- */
+
+  .title-slide {
+    padding: 76px 48px 64px;
+    background: var(--surface);
+    border-color: var(--border);
+  }
+  .title-slide h1 {
+    margin: 0;
+    font-size: clamp(36px, 5.6vw, 60px);
+    line-height: 1.03;
+    letter-spacing: -0.03em;
+    font-weight: 750;
+    text-wrap: balance;
+    max-width: 17ch;
+  }
+  .title-slide .lede { font-size: 19px; }
+
+  .factbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 32px;
+    padding-top: 8px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .factbar b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- Flow ---------- */
+
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .flow-node {
+    flex: 1 1 150px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 14px 16px;
+  }
+  .flow-node .n {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .flow-node .v { font-weight: 650; font-size: 15px; }
+  .flow-arrow {
+    align-self: center;
+    color: var(--violet);
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  /* ---------- Computed / interpreted ---------- */
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .t-comp { color: var(--violet); background: var(--violet-tint); }
+  .t-int  { color: var(--blue);   background: var(--blue-tint); }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .half {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .half-comp { border-top: 3px solid var(--violet); }
+  .half-int  { border-top: 3px solid var(--blue); }
+  .half h3 { margin: 0; font-size: 18px; letter-spacing: -0.012em; }
+  .half p  { margin: 0; font-size: 15px; color: var(--ink-muted); max-width: none; }
+  .half ul {
+    margin: 0; padding-left: 18px; font-size: 14.5px;
+    color: var(--ink-muted); display: grid; gap: 6px;
+  }
+
+  .note {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--violet);
+    border-radius: 10px;
+    background: var(--violet-tint);
+    padding: 18px 22px;
+  }
+  .note p { margin: 0; max-width: none; font-size: 15px; }
+  .note strong { color: var(--ink); }
+
+  /* ---------- Stage list ---------- */
+
+  .stages { display: grid; gap: 12px; }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .stage-rail {
+    background: var(--surface-2);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 20px; gap: 10px;
+  }
+  .stage-dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--violet); color: #fff;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stage-ai .stage-dot { background: var(--blue); }
+  .stage-line { flex: 1; width: 2px; background: var(--border); }
+
+  .stage-main { padding: 20px 22px 22px; display: grid; gap: 14px; }
+  .stage-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+  .stage-top h3 { margin: 0; font-size: 19px; letter-spacing: -0.015em; }
+  .stage-top .fn { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+
+  .stage-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: start; }
+  .stage-grid p { margin: 0; font-size: 15px; max-width: none; }
+  .stage-why {
+    font-size: 14px; color: var(--ink-muted);
+    border-left: 2px solid var(--border); padding-left: 13px; margin-top: 10px;
+  }
+  .stage-why b {
+    display: block; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 3px; font-weight: 600;
+  }
+
+  .code {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .code-h {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.11em;
+    text-transform: uppercase; color: var(--ink-faint);
+    padding: 8px 13px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2); font-weight: 600;
+  }
+  .code ul { margin: 0; padding: 10px 13px; list-style: none; display: grid; gap: 6px; overflow-x: auto; }
+  .code li { font-family: var(--mono); font-size: 12px; line-height: 1.45; white-space: nowrap; }
+  .code li span { color: var(--ink-faint); }
+  .code .f { color: var(--violet); font-weight: 600; }
+  .stage-ai .code .f { color: var(--blue); }
+
+  .out { font-family: var(--mono); font-size: 13px; color: var(--ink-muted); }
+  .out b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- Tables ---------- */
+
+  .scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 600px; }
+  thead th {
+    text-align: left; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-faint);
+    padding: 11px 16px; background: var(--surface-2);
+    border-bottom: 1px solid var(--border); font-weight: 600; white-space: nowrap;
+  }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--ink-muted); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td:first-child { color: var(--ink); font-weight: 600; white-space: nowrap; }
+  code {
+    font-family: var(--mono); font-size: 0.88em;
+    background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--ink);
+  }
+
+  .pill {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    font-weight: 700; letter-spacing: 0.05em; padding: 3px 9px;
+    border-radius: 5px; white-space: nowrap;
+  }
+  .p-ok { color: var(--green); background: var(--green-tint); }
+  .p-no { color: var(--red);   background: var(--red-tint); }
+  .p-rev{ color: var(--amber); background: var(--amber-tint); }
+  .p-na { color: var(--grey);  background: var(--grey-tint); }
+
+  /* ---------- Metrics ---------- */
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(146px, 1fr)); gap: 12px; }
+  .metric {
+    border: 1px solid var(--border); border-top: 3px solid var(--violet);
+    border-radius: 11px; padding: 16px 18px; background: var(--surface);
+  }
+  .metric .v {
+    font-size: 27px; font-weight: 700; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; line-height: 1.1; color: var(--ink);
+  }
+  .metric .k {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-faint); margin-top: 6px;
+  }
+
+  /* ---------- Limits ---------- */
+
+  .limits { display: grid; gap: 10px; }
+  .limit {
+    border: 1px solid var(--border); border-left: 3px solid var(--amber);
+    border-radius: 10px; padding: 16px 20px; background: var(--surface);
+  }
+  .limit h4 { margin: 0 0 4px; font-size: 15px; letter-spacing: -0.008em; }
+  .limit p { margin: 0; font-size: 14.5px; color: var(--ink-muted); max-width: none; }
+
+  /* Same card, used two-up and keyed to the violet rather than the amber:
+     these describe what the report contains, not what it fails to do. */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .cards .limit { border-left-color: var(--violet); }
+
+  footer {
+    padding: 26px 4px 0;
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint);
+    display: flex; flex-wrap: wrap; gap: 6px 26px;
+  }
+
+  @media (max-width: 880px) {
+    .slide { padding: 32px 24px 34px; }
+    .title-slide { padding: 52px 24px 44px; }
+    .duo, .stage-grid, .cards { grid-template-columns: 1fr; }
+    .stage { grid-template-columns: 44px 1fr; }
+    .flow-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- 01 · TITLE -->
+  <section class="slide title-slide">
+    <div class="slide-index">01</div>
+    <div class="kicker">DFX Design-Review · Internal briefing</div>
+    <h1>Automated manufacturability review, straight from CAD</h1>
+    <p class="lede">
+      An engineer uploads a STEP file and chooses a process and material. The
+      system measures the part, checks it against a 249-rule manufacturability
+      catalogue, and returns a report that says what is wrong, where, and what
+      to do about it.
+    </p>
+    <div class="factbar">
+      <span><b>Input</b> STEP / STP</span>
+      <span><b>Process</b> read from geometry</span>
+      <span><b>Catalogue</b> 249 rules · 10 processes</span>
+      <span><b>Typical run</b> 50–90 seconds</span>
+      <span><b>Output</b> 3D model · dashboard · PDF</span>
+      <span><b>Cost per part</b> a fraction of a cent</span>
+    </div>
+  </section>
+
+  <!-- 02 · WHAT IT DOES -->
+  <section class="slide">
+    <div class="slide-index">02</div>
+    <div class="kicker">At a glance</div>
+    <h2>From a CAD file to a prioritised engineering report</h2>
+
+    <div class="flow">
+      <div class="flow-node"><span class="n">Input</span><span class="v">STEP file</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">Measure</span><span class="v">Every face</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">Read process</span><span class="v">From the geometry</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">Check</span><span class="v">Every applicable set</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">Explain</span><span class="v">What it means</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">Output</span><span class="v">3D · dashboard · PDF</span></div>
+    </div>
+
+    <p>
+      The measurements are real geometry, not metadata: wall thickness is taken
+      by casting rays into the solid, draft is computed against the direction
+      the mould opens, and holes are found by analysing the surfaces themselves.
+      Nothing depends on the CAD system that produced the file or on any
+      annotation an engineer remembered to add.
+    </p>
+  </section>
+
+  <!-- 03 · THE TWO HALVES -->
+  <section class="slide">
+    <div class="slide-index">03</div>
+    <div class="kicker">The core idea</div>
+    <h2>Two halves, with very different standing</h2>
+    <p class="lede">
+      If a stakeholder takes one thing from this briefing, it should be which
+      half produced which number.
+    </p>
+
+    <div class="duo">
+      <div class="half half-comp">
+        <span class="tag t-comp">Computed</span>
+        <h3>Geometry and verdicts</h3>
+        <p>
+          Measured from the model by a geometry kernel, then compared against
+          numeric thresholds. Repeatable and auditable — the same file always
+          gives the same answer.
+        </p>
+        <ul>
+          <li>Wall thickness, draft angle, hole size and depth</li>
+          <li>Undercut detection</li>
+          <li>Every compliant / non-compliant verdict</li>
+          <li>Which process families the part is checked against</li>
+          <li>Every feature name</li>
+          <li>Coverage accounting</li>
+        </ul>
+      </div>
+      <div class="half half-int">
+        <span class="tag t-int">Interpreted</span>
+        <h3>Commentary and summary</h3>
+        <p>
+          Written by a language model that is handed the measurements and asked
+          what they mean for manufacture. Advisory, and labelled as such
+          wherever it appears.
+        </p>
+        <ul>
+          <li>Per-finding engineering commentary</li>
+          <li>The reading of which process the part is for</li>
+          <li>The part-level executive summary</li>
+          <li>Prioritised risks and recommendations</li>
+          <li>Nothing else</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>The model cannot change a verdict, and that is enforced by the
+        data contract rather than by asking nicely.</strong> The JSON structure
+        it must answer in has exactly three fields per finding — which finding,
+        the comment, and a confidence — with unlisted fields rejected. There is
+        nowhere to put a pass or a fail. A test sends a model response
+        containing <code>"status": "COMPLIANT"</code> and asserts the finding is
+        unchanged.
+      </p>
+    </div>
+  </section>
+
+  <!-- 04 · PIPELINE -->
+  <section class="slide">
+    <div class="slide-index">04</div>
+    <div class="kicker">How it runs</div>
+    <h2>Seven stages, each consuming the last</h2>
+    <p class="lede">
+      Stages 1–4 and 6–7 are computed. Stage 5 is the only place a language
+      model decides anything, and even there it decides nothing — it writes.
+    </p>
+
+    <div class="stages">
+
+      <article class="stage">
+        <div class="stage-rail"><div class="stage-dot">1</div><div class="stage-line"></div></div>
+        <div class="stage-main">
+          <div class="stage-top">
+            <h3>Ingest</h3><span class="tag t-comp">Computed</span>
+            <span class="fn">step_loader.load_step()</span>
+          </div>
+          <div class="stage-grid">
+            <div>
+              <p>
+                Reads the file into a solid model, normalises it to millimetres,
+                repairs minor topological damage, and records what it found —
+                declared units, solid count, overall size, and whether the shape
+                is genuinely a closed solid.
+              </p>
+              <div class="stage-why">
+                <b>Why it matters</b>
+                Wall thickness assumes a closed solid. An open shell or a
+                multi-body assembly still measures, but the numbers mean less —
+                so the loader says so instead of letting the rest of the
+                pipeline assume otherwise.
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-h">What runs</div>
+              <ul>
+                <li><span class="f">step_loader.py</span></li>
+                <li>load_step<span>()</span></li>
+                <li>detect_declared_units<span>()</span></li>
+                <li>ShapeFix_Shape<span> — heal</span></li>
+                <li>BRepCheck_Analyzer<span> — validate</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="out">→ <b>LoadedPart</b> · shape + units + warnings</div>
+        </div>
+      </article>
+
+      <article class="stage">
+        <div class="stage-rail"><div class="stage-dot">2</div><div class="stage-line"></div></div>
+        <div class="stage-main">
+          <div class="stage-top">
+            <h3>Extract</h3><span class="tag t-comp">Computed</span>
+            <span class="fn">features.build_part_model()</span>
+          </div>
+          <div class="stage-grid">
+            <div>
+              <p>
+                Measures every face. It samples points proven to lie inside the
+                trimmed surface, takes the outward normal, computes draft
+                against the pull direction, casts rays inward for thickness, and
+                groups cylindrical faces that belong to the same bore so a
+                drilled hole is recognised as one feature. It then names every
+                face from what it just measured — "Ø5.94 mm hole, upper front
+                right", "R6.35 mm internal fillet", "Floor" — so a finding can
+                say what it is about rather than quoting a face number.
+              </p>
+              <div class="stage-why">
+                <b>Why it matters</b>
+                This is where the engineering lives. Three conventions are
+                load-bearing — normal orientation, the draft convention, and
+                sampling inside the trimmed face — and each is verified against
+                parts whose true dimensions are known by construction. Names are
+                derived from those same measurements and nothing else: a
+                confidently wrong name sends an engineer to the wrong feature,
+                which is worse than a number that tells them nothing.
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-h">What runs</div>
+              <ul>
+                <li><span class="f">features.py</span></li>
+                <li>interior_uv_samples<span>()</span></li>
+                <li>outward_normal_at<span>()</span></li>
+                <li>calculate_draft_angle<span>()</span></li>
+                <li>measure_thickness_at<span>()</span></li>
+                <li>group_cylindrical_faces<span>()</span></li>
+                <li>is_face_occluded<span>()</span></li>
+                <li><span class="f">feature_naming.py</span></li>
+                <li>build_labels<span>()</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="out">→ <b>PartModel</b> · one measured, named face record each</div>
+        </div>
+      </article>
+
+      <article class="stage">
+        <div class="stage-rail"><div class="stage-dot">3</div><div class="stage-line"></div></div>
+        <div class="stage-main">
+          <div class="stage-top">
+            <h3>Classify</h3><span class="tag t-comp">Computed</span>
+            <span class="fn">process_classifier.classify()</span>
+          </div>
+          <div class="stage-grid">
+            <div>
+              <p>
+                Reads how the part was meant to be made. Scores each process
+                family against the measurements — draft coverage, wall thickness
+                and its spread, corner-radius consistency, gauge, solid count —
+                and returns every family worth checking, with the sentences each
+                score was computed from.
+              </p>
+              <div class="stage-why">
+                <b>Why it matters</b>
+                Choosing the process by hand is the one step where a user can be
+                silently, expensively wrong: pick machining for a moulded
+                housing and every draft rule is skipped, and the report comes
+                back clean. Reading it from the geometry removes that failure,
+                and checking every candidate means a wrong reading costs a
+                section nobody reads rather than a defect nobody sees.
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-h">What runs</div>
+              <ul>
+                <li><span class="f">process_classifier.py</span></li>
+                <li>measure_signals<span>()</span></li>
+                <li>classify<span>()</span></li>
+                <li>_Scorer.disqualify<span>()</span></li>
+                <li>_Scorer.cap<span>()</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="out">→ <b>Classification</b> · scored families + their evidence</div>
+        </div>
+      </article>
+
+      <article class="stage">
+        <div class="stage-rail"><div class="stage-dot">4</div><div class="stage-line"></div></div>
+        <div class="stage-main">
+          <div class="stage-top">
+            <h3>Execute</h3><span class="tag t-comp">Computed</span>
+            <span class="fn">pipeline.execute_rules()</span>
+          </div>
+          <div class="stage-grid">
+            <div>
+              <p>
+                Runs the catalogue. Before any rule produces a verdict it passes
+                three gates: is the metric computable, does the rule apply to
+                the chosen material, and does it apply to this face. A rule that
+                fails a gate returns one explained result rather than an
+                indeterminate row per face.
+              </p>
+              <div class="stage-why">
+                <b>Why it matters</b>
+                This is what separates a report from a data dump. Without
+                material scoping, the ABS, PC and PP wall rules all fire at once
+                and contradict each other. Without face scoping, hole rules run
+                against flat walls.
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-h">What runs</div>
+              <ul>
+                <li><span class="f">pipeline.py · rule_scoping.py</span></li>
+                <li>execute_rules<span>()</span></li>
+                <li>rule_material_applies<span>()</span></li>
+                <li>metric_applies_to_face<span>()</span></li>
+                <li>normalize_predicate<span>()</span></li>
+                <li>_safe_predicate_eval<span>()</span></li>
+                <li>lint_catalog<span>()</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="out">→ <b>Findings</b> + <b>coverage</b></div>
+        </div>
+      </article>
+
+      <article class="stage stage-ai">
+        <div class="stage-rail"><div class="stage-dot">5</div><div class="stage-line"></div></div>
+        <div class="stage-main">
+          <div class="stage-top">
+            <h3>Interpret</h3><span class="tag t-int">Interpreted</span>
+            <span class="fn">agents.orchestrator</span>
+          </div>
+          <div class="stage-grid">
+            <div>
+              <p>
+                Two agents run at the same time. The <b>commentary agent</b>
+                takes the findings needing engineering judgement, in batches, and
+                writes what each measurement implies. The <b>summary agent</b>
+                sees the whole part at once and writes the opening narrative —
+                headline, assessment, ranked risks with recommendations.
+              </p>
+              <div class="stage-why">
+                <b>Why batched</b>
+                One request covering many findings lets the model see that eight
+                faces failed the same rule and describe the pattern. The summary
+                agent groups by rule first, so one rule failing on eight faces
+                takes one slot rather than crowding out a different problem.
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-h">What runs</div>
+              <ul>
+                <li><span class="f">agents/orchestrator.py · llm.py</span></li>
+                <li>enrich_review_findings<span>()</span></li>
+                <li>_request_commentary<span>()</span></li>
+                <li>generate_executive_summary<span>()</span></li>
+                <li>_rank_findings_for_summary<span>()</span></li>
+                <li>LLMClient.complete_json<span>()</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="out">→ <b>commentary</b> on findings + <b>summary</b></div>
+        </div>
+      </article>
+
+      <article class="stage">
+        <div class="stage-rail"><div class="stage-dot">6</div><div class="stage-line"></div></div>
+        <div class="stage-main">
+          <div class="stage-top">
+            <h3>Validate</h3><span class="tag t-comp">Computed</span>
+            <span class="fn">orchestrator.validate()</span>
+          </div>
+          <div class="stage-grid">
+            <div>
+              <p>
+                Audits the report against itself: a fail verdict with no
+                measurement behind it, a finding pointing at a face that does
+                not exist, a skipped rule with no reason given, and two rules in
+                the same category disagreeing about the same face.
+              </p>
+              <div class="stage-why">
+                <b>Why it matters</b>
+                This catches the system being confidently wrong rather than
+                merely incomplete. A contradiction means rule scoping has broken
+                somewhere, and it belongs in the report rather than in the
+                client's inbox.
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-h">What runs</div>
+              <ul>
+                <li><span class="f">agents/orchestrator.py</span></li>
+                <li>validate<span>()</span></li>
+                <li>_find_contradictions<span>()</span></li>
+                <li><span>+ ingest warnings</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="out">→ <b>validation issues</b></div>
+        </div>
+      </article>
+
+      <article class="stage">
+        <div class="stage-rail"><div class="stage-dot">7</div></div>
+        <div class="stage-main">
+          <div class="stage-top">
+            <h3>Report</h3><span class="tag t-comp">Computed</span>
+            <span class="fn">main.py · /api/analyze · /api/report</span>
+          </div>
+          <div class="stage-grid">
+            <div>
+              <p>
+                Assembles the response, saves a versioned record so this run can
+                be compared against a later revision of the same part, and
+                returns everything the interface needs. The same stored record
+                also renders on demand as a standalone HTML or PDF report.
+              </p>
+              <div class="stage-why">
+                <b>Why it matters</b>
+                Persisting each run is what makes the rework story possible:
+                review revision A, let the design engineer fix it, then show
+                exactly which findings closed in revision B. Because the report
+                reads that record rather than re-running the part, it can be
+                reopened at any time at no cost.
+              </div>
+            </div>
+            <div class="code">
+              <div class="code-h">What runs</div>
+              <ul>
+                <li><span class="f">main.py · database.py</span></li>
+                <li>analyze_step_file<span>()</span></li>
+                <li>save_analysis<span>()</span></li>
+                <li>compare_analyses<span>()</span></li>
+                <li><span class="f">report/renderer.py · charts.py</span></li>
+                <li>render_html<span>()</span> · render_pdf<span>()</span></li>
+                <li><span class="f">mesh.py</span></li>
+                <li>tessellate<span>()</span> · pack<span>()</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="out">→ <b>JSON</b> + <b>mesh</b> → React interface &nbsp;·&nbsp; <b>HTML / PDF</b> → design review</div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 05 · CLASSIFICATION -->
+  <section class="slide">
+    <div class="slide-index">05</div>
+    <div class="kicker">Before any rule runs</div>
+    <h2>The part says how it was meant to be made</h2>
+    <p class="lede">
+      Choosing the process by hand is the one step where a user can be silently,
+      expensively wrong. Pick "machining" for a moulded housing and every draft
+      rule is skipped: the report comes back clean and says nothing about the
+      defect that mattered most.
+    </p>
+
+    <div class="duo">
+      <div class="half half-comp">
+        <div class="tag t-comp">Computed</div>
+        <h3>What separates the processes</h3>
+        <p>
+          A moulded part and a machined part do not look alike, and the
+          difference is measurable.
+        </p>
+        <ul>
+          <li><b>Draft</b> — a moulded wall is tapered so the tool can open; a
+            machined wall is square, because that is what a cutter leaves</li>
+          <li><b>Wall thickness and its spread</b> — moulded parts are designed
+            to a nominal wall, machined ones are whatever the pocket left</li>
+          <li><b>Corner radii</b> — internal corners sharing one radius are the
+            signature of a single cutter</li>
+          <li><b>Gauge and proportion</b> — sheet metal is one thickness, far
+            thinner than anything else about the part</li>
+          <li><b>Solid count</b> — more than one solid is an assembly</li>
+        </ul>
+      </div>
+      <div class="half half-int">
+        <div class="tag t-int">Interpreted</div>
+        <h3>The reading</h3>
+        <p>
+          A language model turns the scores into two or three sentences an
+          engineer would accept — quoting the measurements, not describing them.
+          It explains the conclusion; it cannot change it.
+        </p>
+        <ul>
+          <li>Which process the part reads as, and on what evidence</li>
+          <li>What would settle a close call</li>
+          <li>What in the reading to be careful about</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>Every candidate is analysed, not just the winner.</strong> A part
+        that could be machined or pressed gets both sections, each labelled with
+        how it was read. Being wrong then costs a section nobody reads, rather
+        than a defect nobody sees. Two things are stated rather than guessed
+        around: a physical impossibility rules a process out outright (forming
+        cannot change the gauge of the sheet it started from), and a process
+        recognised only by what it is <em>compatible</em> with is offered as a
+        possibility, never as a conclusion.
+      </p>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>The limit, stated plainly.</strong> A STEP file carries no
+        material. Injection moulding and die casting are the same shape, so
+        geometry cannot tell them apart at all — when both score highly the
+        report says so and analyses both, rather than picking one.
+      </p>
+    </div>
+  </section>
+
+  <!-- 06 · STATUSES -->
+  <section class="slide">
+    <div class="slide-index">06</div>
+    <div class="kicker">Reading the output</div>
+    <h2>Every finding lands in one of five states</h2>
+    <p class="lede">
+      The distinction between "this failed" and "this was never checked" is the
+      difference between a report you can act on and one you have to audit.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Status</th><th>Means</th><th>Decided by</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="pill p-ok">COMPLIANT</span></td>
+            <td>Measured, and it satisfies the rule.</td>
+            <td>Geometry</td>
+          </tr>
+          <tr>
+            <td><span class="pill p-no">NON-COMPLIANT</span></td>
+            <td>Measured, and it violates the rule.</td>
+            <td>Geometry</td>
+          </tr>
+          <tr>
+            <td><span class="pill p-rev">NEEDS_REVIEW</span></td>
+            <td>
+              Needs engineering judgement — a genuinely qualitative rule, or
+              advisory guidance the part falls outside. The only status the
+              language model ever comments on.
+            </td>
+            <td>Geometry flags, model explains</td>
+          </tr>
+          <tr>
+            <td><span class="pill p-na">NOT_EVALUATED</span></td>
+            <td>
+              The rule did not run, and says why: wrong material, no extractor
+              for the metric, no face carrying the feature, or a catalogue entry
+              the linter found untrustworthy.
+            </td>
+            <td>Rule scoping</td>
+          </tr>
+          <tr>
+            <td><span class="pill p-no">ERROR</span></td>
+            <td>Evaluation was attempted and failed.</td>
+            <td>Engine</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>Coverage is stated, not implied.</strong> On a typical part
+        around 19 of 70 injection-moulding rules produce a verdict; the rest
+        need feature recognition, process inputs, or a corrected catalogue
+        entry. The interface shows that count and the executive summary repeats
+        it in words. A report that looks complete when it tested a third of the
+        catalogue is worse than one that admits the gap.
+      </p>
+    </div>
+  </section>
+
+  <!-- 06 · THE REPORT -->
+  <section class="slide">
+    <div class="slide-index">07</div>
+    <div class="kicker">What comes out</div>
+    <h2>A model to point at, a dashboard to work from, a document to circulate</h2>
+    <p class="lede">
+      The engineer running the analysis reads the interface. Everybody else —
+      the design review, the tooling supplier, the file that gets attached to an
+      email — needs something that stands on its own. Both come from the same
+      stored result.
+    </p>
+
+    <div class="flow">
+      <div class="flow-node"><span class="n">Stored run</span><span class="v">Findings + mesh</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">Charts</span><span class="v">SVG, server-side</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">One template</span><span class="v">Jinja2</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="n">HTML</span><span class="v">In the browser</span></div>
+      <div class="flow-node"><span class="n">PDF</span><span class="v">WeasyPrint</span></div>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>The model itself is the third output.</strong> Every finding
+        names a face, and a face number means nothing to a person reading a
+        table. The part is tessellated during the analysis and every triangle
+        carries the same face number the rules used, so the view can paint each
+        face by its worst finding — red for failed, amber for review, green for
+        passed, grey where no rule reached — and a click on a wall narrows the
+        table to what is wrong with that wall. It costs no extra time: the
+        meshing runs while the model requests are in flight.
+      </p>
+    </div>
+
+    <div class="cards">
+      <div class="limit">
+        <h4>The assessment, in words</h4>
+        <p>
+          The model-written summary and its ranked risks open the document, so
+          the first thing a reader meets is what the part's problem actually is
+          — not a table they have to interpret.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>Measurement against its limit</h4>
+        <p>
+          For the rules carrying real numbers, every measured face is plotted
+          against the band the rule allows. A wall at 0.82 mm against a 1.0 mm
+          floor reads instantly as marginal; one at 0.31 mm does not.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>One row per problem, not per face</h4>
+        <p>
+          A rule failing on thirty faces is one finding worth reading once, with
+          the locations listed. The interface keeps the per-face detail; the
+          document collapses it.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>What was not evaluated, and why</h4>
+        <p>
+          The coverage bar and the not-evaluated section carry into the PDF.
+          Nothing about the document lets a reader mistake a partial check for a
+          clean bill of health.
+        </p>
+      </div>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>One template, two renderers.</strong> The browser view and the
+        PDF are the same markup — the charts are SVG drawn on the server rather
+        than by a JavaScript charting library, so they survive the trip into the
+        PDF unchanged. There is one place to change the design, and the two
+        outputs cannot drift apart. Reports render from the stored run rather
+        than re-analysing, so opening one months later is instant and costs
+        nothing — including no further model calls.
+      </p>
+    </div>
+
+    <div class="out">
+      → <b>GET</b> /api/report/{version_id}.html &nbsp;·&nbsp;
+      <b>GET</b> /api/report/{version_id}.pdf
+    </div>
+  </section>
+
+  <!-- 07 · VALIDATION -->
+  <section class="slide">
+    <div class="slide-index">08</div>
+    <div class="kicker">Confidence</div>
+    <h2>How we know the measurements are right</h2>
+    <p class="lede">
+      Geometry cannot be checked by eye — a wall thickness of 1.87 mm looks
+      equally plausible whether it is right or wrong. Two independent lines of
+      evidence.
+    </p>
+
+    <div class="duo">
+      <div class="half half-comp">
+        <h3>Parts with known answers</h3>
+        <p>
+          Test parts are generated from primitives with exact dimensions — a
+          2&nbsp;mm shelled box, a wall drafted by exactly 2.862°, a plate with
+          a Ø5&nbsp;mm hole, a block with a cross-bore that cannot be moulded.
+          Each measurement is asserted against the number the part was built
+          with, so a regression fails here rather than silently changing every
+          customer report.
+        </p>
+      </div>
+      <div class="half half-comp">
+        <h3>Real CAD from a public benchmark</h3>
+        <p>
+          The full NIST MBE PMI validation set — 33 STEP files of real machined
+          test artifacts, in AP203 and AP242, mixing millimetre and inch, and
+          deliberately containing syntax errors. All 33 process without failure,
+          and every face of every well-formed part is measured.
+        </p>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric"><div class="v">147</div><div class="k">automated tests</div></div>
+      <div class="metric"><div class="v">33/33</div><div class="k">NIST parts, zero failures</div></div>
+      <div class="metric"><div class="v">8,173</div><div class="k">faces measured</div></div>
+      <div class="metric"><div class="v">1,640</div><div class="k">holes recognised</div></div>
+      <div class="metric"><div class="v">0.5s</div><div class="k">median extraction</div></div>
+      <div class="metric"><div class="v">0</div><div class="k">faces skipped</div></div>
+      <div class="metric"><div class="v">0</div><div class="k">faces left unnamed</div></div>
+      <div class="metric"><div class="v">32/33</div><div class="k">reached the right rules</div></div>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>The claim worth making about the process reading is a safety
+        one, and it is measured.</strong> Across all 33 NIST parts — machined
+        artifacts, every one — the reading named machining first on 21. On the
+        other 12 it did not, and on 11 of those the machining rules were checked
+        anyway, because every candidate above the threshold is analysed. One
+        part fell outside: a six-face reference body drafted throughout, where
+        machining genuinely does not fit. So a misread costs a section nobody
+        reads rather than a defect nobody sees, which is the property the whole
+        design is built around.
+      </p>
+    </div>
+
+    <p>
+      Both are needed and they catch different things. Synthetic parts prove the
+      arithmetic is right; real files prove the assumptions behind the
+      arithmetic are right. Unit handling, for instance, is confirmed by an
+      inch-declared part reporting Ø4.763&nbsp;mm and Ø7.938&nbsp;mm holes —
+      exactly 3/16&Prime; and 5/16&Prime;, standard drill sizes, correctly
+      converted.
+    </p>
+  </section>
+
+  <!-- 08 · STACK -->
+  <section class="slide">
+    <div class="slide-index">09</div>
+    <div class="kicker">What it is built on</div>
+    <h2>Where each piece runs, and what it costs</h2>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Technology</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Geometry</td>
+            <td>OpenCascade via <code>pythonocc-core</code></td>
+            <td>Runs locally. The same kernel behind several commercial CAD tools.</td>
+          </tr>
+          <tr>
+            <td>Feature naming</td>
+            <td>Python, from the measured geometry</td>
+            <td>
+              Names every face by shape, size and position. Deterministic — no
+              model involved, because a wrong name is worse than a number.
+            </td>
+          </tr>
+          <tr>
+            <td>Process reading</td>
+            <td>Weighted geometric tests + DeepSeek V4 Flash</td>
+            <td>
+              Scores every family from measured signals; the model writes the
+              rationale but cannot change which sets are checked.
+            </td>
+          </tr>
+          <tr>
+            <td>Rules</td>
+            <td>Python + JSON catalogue</td>
+            <td>249 rules across 10 process families, linted at load and executed one family at a time so coverage stays per-family.</td>
+          </tr>
+          <tr>
+            <td>Interpretation</td>
+            <td>DeepSeek V4 Flash via OpenRouter</td>
+            <td>
+              One request per rule needing judgement — not per finding — batched
+              and run concurrently. Usually under a dozen. Optional: with no key
+              the report still carries every verdict and every feature name.
+            </td>
+          </tr>
+          <tr>
+            <td>API</td>
+            <td>FastAPI + SQLite</td>
+            <td>Each run is versioned so revisions can be compared.</td>
+          </tr>
+          <tr>
+            <td>Interface</td>
+            <td>React + Material UI</td>
+            <td>Findings table, coverage dashboard, revision comparison.</td>
+          </tr>
+          <tr>
+            <td>3D view</td>
+            <td>OpenCascade tessellation + three.js</td>
+            <td>
+              Face numbering shared with the analysis, so a click resolves back
+              to that face's findings.
+            </td>
+          </tr>
+          <tr>
+            <td>Report</td>
+            <td>Jinja2 + WeasyPrint, charts as server-drawn SVG</td>
+            <td>
+              One template renders both the browser view and the PDF, from the
+              stored run rather than a re-analysis.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>Only measurements leave the machine.</strong> The model receives
+        rule names, measured values and part-level metadata such as overall size
+        and nominal wall thickness. <b>The STEP file and its geometry are never
+        uploaded.</b> If design data is restricted, that distinction is a
+        property of this design rather than of the provider — it holds if the
+        model is later swapped or moved in-house.
+      </p>
+    </div>
+  </section>
+
+  <!-- 09 · LIMITS -->
+  <section class="slide">
+    <div class="slide-index">10</div>
+    <div class="kicker">Being straight about it</div>
+    <h2>What this does not yet do</h2>
+    <p class="lede">
+      A demo that oversells is harder to recover from than one that is candid.
+    </p>
+
+    <div class="limits">
+      <div class="limit">
+        <h4>Checking every candidate costs time</h4>
+        <p>
+          A single-family run takes around 50 seconds; checking every candidate
+          for a large ambiguous part takes 60 to 90. Almost all of it is the
+          commentary requests — measuring a 637-face part takes under three
+          seconds. Those requests scale with the number of <em>rules</em> needing
+          judgement rather than the number of findings, which is what keeps a
+          306-face part checked against five catalogues to a minute and a half
+          rather than ten. Worth knowing before a live demo.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>The process reading is evidence, not certification</h4>
+        <p>
+          It scores what the geometry is consistent with. It cannot see the
+          material, the volume, the tooling budget or the supplier — all of
+          which really decide the process. Treat it as the shortlist a colleague
+          would give you after a minute with the model, not as a routing
+          decision.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>Coverage is partial, by roughly two thirds</h4>
+        <p>
+          Around 19 of 70 injection-moulding rules produce a verdict on a simple
+          part. The rest need feature recognition, process inputs such as
+          surface finish, or corrected catalogue entries. This is visible in the
+          report rather than hidden.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>Features are named by shape, not by purpose</h4>
+        <p>
+          A finding now says "Ø5.94 mm hole, upper front right" rather than
+          "face 214", and the 3D view shows you which one that is. What it will
+          not say is "the mounting hole" or "the boss near the parting line",
+          because nothing here measures purpose. That restraint is deliberate —
+          a name that sends an engineer to the wrong feature costs more than a
+          name that tells them nothing — but it does mean the report describes
+          the part rather than understanding it.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>Thickness is a ray measurement</h4>
+        <p>
+          On curved or tapered walls it returns a chord at or above the true
+          perpendicular thickness. Production tools use an inscribed-sphere
+          method, which is more accurate and more expensive.
+        </p>
+      </div>
+      <div class="limit">
+        <h4>The catalogue has known bad entries</h4>
+        <p>
+          Some rules were damaged converting the source spreadsheet — a numeric
+          range read as a date, thresholds that lost the dimension they were a
+          multiple of. These are detected at load and refused rather than
+          allowed to produce a confident wrong answer, but the source data still
+          needs fixing.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Dyson DFX Design-Review POC</span>
+    <span>Deterministic geometry · advisory interpretation</span>
+  </footer>
+
+</div>
+</body>
+</html>

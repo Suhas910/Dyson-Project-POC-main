@@ -1,0 +1,48 @@
+# Dependencies
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Vite cache
+frontend/.vite/
+
+# Environment files — real keys never get committed, but the template must,
+# or nobody knows which variables to set.
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+backend/dfm_analysis.db
+
+# Test and runtime artifacts
+backend.log
+.pytest_cache/
+
+# Local machine state — the permission grants in settings.local.json are
+# specific to one developer's machine. launch.json is project config and stays.
+.claude/settings.local.json
+
+# The NIST MBE PMI validation set: 67 MB of public benchmark data, freely
+# available from NIST, and reproducible by anyone who wants to re-run the
+# geometry benchmark. The real-world tests skip cleanly when it is absent, so
+# a clone without it still runs the whole suite. See README for the download.
+NIST-PMI-STEP-Files/
+NIST-PMI-STEP-Files.zip
+
+# One-off report renders made while iterating on the template.
+docs/_report_preview.html

@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+# pythonocc-core # Install via conda: conda install -c conda-forge pythonocc-core
+openpyxl
+pydantic
+
+# Interpretive layer. OpenRouter exposes an OpenAI-compatible API, so the
+# official OpenAI SDK is used as the transport with the base URL repointed.
+# Both are optional at runtime: without OPENROUTER_API_KEY the pipeline still
+# produces every deterministic verdict, just without commentary.
+openai>=1.40
+python-dotenv
+
+# Tests
+pytest

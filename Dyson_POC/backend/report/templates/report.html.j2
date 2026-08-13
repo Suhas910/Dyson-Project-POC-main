@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DFM Report — {{ analysis.file_name }}</title>
+<style>
+  :root {
+    --violet: #440099;
+    --violet-tint: #F3EEFA;
+    --blue: #0057B8;
+    --ink: #041E42;
+    --ink-muted: #5A6478;
+    --ink-faint: #8A90A0;
+    --border: #E3DEEE;
+    --surface: #F8F6FB;
+    --surface-2: #F1EDF7;
+    --paper: #FFFFFF;
+    --red: #A6192E;   --red-tint: #F9E9EC;
+    --amber: #8A6400; --amber-tint: #FCF4DE;
+    --green: #006B31; --green-tint: #E6F3EC;
+    --grey: #565E6B;  --grey-tint: #F1F2F5;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  /* Print geometry. A DFM report is filed and marked up, so it is laid out for
+     A4 with the part and page number repeated on every sheet. */
+  @page {
+    size: A4;
+    margin: 16mm 14mm 18mm;
+    @bottom-left {
+      content: "{{ analysis.file_name }} · {{ analysis.process_family }}";
+      font-family: var(--mono); font-size: 7.5pt; color: #8A90A0;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: var(--mono); font-size: 7.5pt; color: #8A90A0;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: {{ '9.5pt' if for_pdf else '15px' }};
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    {% if not for_pdf %}
+    /* Nothing in this document is allowed to make the page scroll sideways.
+       Wide content wraps or scales; it never widens the page. */
+    overflow-x: hidden;
+    {% endif %}
+  }
+
+  .sheet {
+    {% if not for_pdf %}
+    /* A measure that stays readable rather than a width that fills the display:
+       at 2K a full-width line of body text is too long to track. The `min` keeps
+       the sheet inside a 720p window, where a flat 900px would overflow it. */
+    max-width: min(900px, 100%);
+    margin: 0 auto;
+    padding: 32px clamp(14px, 3vw, 28px) 80px;
+    {% endif %}
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    border-bottom: 2px solid var(--violet);
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: {{ '7.5pt' if for_pdf else '11px' }};
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--violet); font-weight: 700;
+  }
+  h1 {
+    margin: 6px 0 4px;
+    font-size: {{ '19pt' if for_pdf else '30px' }};
+    line-height: 1.12; letter-spacing: -0.02em; font-weight: 750;
+  }
+  .subtitle { margin: 0; color: var(--ink-muted); }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat({{ 4 if for_pdf else 'auto-fit, minmax(150px, 1fr)' }});
+    gap: 8px 20px;
+    margin-top: 14px;
+    font-size: {{ '8pt' if for_pdf else '13px' }};
+  }
+  .fact .k {
+    font-family: var(--mono);
+    font-size: {{ '6.8pt' if for_pdf else '10px' }};
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-faint); display: block;
+  }
+  .fact .v { font-weight: 650; }
+
+  /* ---------- Sections ---------- */
+  section { margin-top: {{ '9mm' if for_pdf else '34px' }}; }
+  h2 {
+    margin: 0 0 10px;
+    font-size: {{ '12pt' if for_pdf else '20px' }};
+    letter-spacing: -0.015em; font-weight: 700;
+    padding-bottom: 5px; border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    margin: 14px 0 6px;
+    font-size: {{ '9.5pt' if for_pdf else '15px' }};
+    font-weight: 700;
+  }
+  p { margin: 0 0 9px; }
+
+  .chart { margin: 10px 0 16px; }
+  /* A chart is drawn at a fixed pixel size; on a narrow window or an A4 page it
+     has to scale to the column rather than set the column's width. */
+  .chart svg { max-width: 100%; height: auto; display: block; }
+  .chart-title {
+    font-family: var(--mono);
+    font-size: {{ '7pt' if for_pdf else '10.5px' }};
+    letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 600; margin-bottom: 4px;
+  }
+
+  /* ---------- Verdict banner ---------- */
+  .verdict {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--violet);
+    border-radius: 6px;
+    background: var(--surface);
+    padding: {{ '4mm' if for_pdf else '18px 20px' }};
+  }
+  .verdict.fail { border-left-color: var(--red); background: var(--red-tint); }
+  .verdict.pass { border-left-color: var(--green); background: var(--green-tint); }
+  .verdict .headline {
+    font-size: {{ '11pt' if for_pdf else '18px' }};
+    font-weight: 700; line-height: 1.3; margin-bottom: 6px;
+  }
+  .verdict p { margin: 0; }
+  .attribution {
+    font-family: var(--mono);
+    font-size: {{ '6.8pt' if for_pdf else '10.5px' }};
+    color: var(--ink-faint); margin-top: 8px;
+  }
+
+  /* ---------- Risks ---------- */
+  .risk {
+    border-left: 3px solid var(--grey);
+    padding-left: 11px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+  .risk.critical { border-left-color: var(--red); }
+  .risk.major { border-left-color: var(--amber); }
+  .risk .t { font-weight: 700; }
+  .risk .w { color: var(--ink-muted); }
+  .risk .r { color: var(--blue); }
+
+  /* ---------- Tables ---------- */
+  /* `fixed` rather than `auto` is the whole fix for the report running off the
+     side of the page. With auto layout the browser widens a table until its
+     longest unbreakable content fits -- and the Rule cell carries a paragraph
+     of commentary, which pushed the table past 4700px and the page with it. On
+     screen that meant scrolling sideways to read; in the PDF, where there is
+     nothing to scroll, it meant the right-hand columns were simply cut off the
+     page. Fixed layout makes the columns obey the widths below and wrap. */
+  table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: {{ '8pt' if for_pdf else '13.5px' }};
+  }
+  /* Long unbroken tokens -- a rule id, a file name, a URL in a guideline
+     reference -- would otherwise still force a column wider than its share. */
+  th, td { overflow-wrap: anywhere; word-break: break-word; }
+  thead { display: table-header-group; }
+  th {
+    text-align: left; font-family: var(--mono);
+    font-size: {{ '6.8pt' if for_pdf else '10.5px' }};
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint);
+    padding: 7px 8px; background: var(--surface-2);
+    border-bottom: 1px solid var(--border); font-weight: 700;
+  }
+  td {
+    padding: 7px 8px; border-bottom: 1px solid var(--border);
+    vertical-align: top; color: var(--ink-muted);
+  }
+  tr { page-break-inside: avoid; }
+  /* No `nowrap` here: this cell holds the rule name and the commentary, which
+     are prose and must wrap. Only genuinely short values keep nowrap. */
+  td.rule { color: var(--ink); font-weight: 650; }
+  td.num { font-family: var(--mono); white-space: nowrap; color: var(--ink); }
+
+  .pill {
+    display: inline-block; font-family: var(--mono);
+    font-size: {{ '6.5pt' if for_pdf else '10px' }};
+    font-weight: 700; letter-spacing: 0.04em;
+    padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+  }
+  .s-noncompliant { color: var(--red); background: var(--red-tint); }
+  .s-error        { color: var(--red); background: var(--red-tint); }
+  .s-needsreview  { color: var(--amber); background: var(--amber-tint); }
+  .s-compliant    { color: var(--green); background: var(--green-tint); }
+  .s-notevaluated { color: var(--grey); background: var(--grey-tint); }
+
+  .commentary {
+    color: var(--ink-muted);
+    font-style: italic;
+    padding-top: 3px;
+  }
+  .commentary::before { content: "AI · "; font-style: normal; font-family: var(--mono); color: var(--blue); font-size: 0.85em; }
+
+  .muted { color: var(--ink-faint); }
+  .note {
+    border: 1px solid var(--border); border-left: 3px solid var(--violet);
+    background: var(--violet-tint); border-radius: 6px;
+    padding: {{ '3.5mm' if for_pdf else '14px 16px' }};
+    margin-top: 10px;
+  }
+  .note p { margin: 0; }
+
+  footer {
+    margin-top: {{ '10mm' if for_pdf else '40px' }};
+    padding-top: 10px; border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: {{ '6.8pt' if for_pdf else '11px' }};
+    color: var(--ink-faint);
+  }
+
+  .page-break { page-break-before: always; }
+
+{% if for_pdf %}
+  /* ---------- How the document breaks across pages ----------
+     There is no scrolling in a PDF, so anything the layout gets wrong here is
+     a hole in the deliverable rather than an inconvenience. Three rules cover
+     nearly all of it. */
+
+  /* A heading alone at the foot of a page, with its content overleaf, reads as
+     a section that lost its contents. */
+  h2, h3 { break-after: avoid; page-break-after: avoid; }
+
+  /* A chart split down the middle is unreadable in both halves, and a legend
+     separated from its bars is worse than either. */
+  .chart, .chart-title, .facts, .note, .verdict { break-inside: avoid; page-break-inside: avoid; }
+
+  /* A chart title stranded above a page break belongs with its chart. */
+  .chart-title { break-after: avoid; page-break-after: avoid; }
+
+  /* Two lines is the least that is worth leaving behind or carrying over; a
+     single stranded line reads as a mistake. */
+  p, li, td { orphans: 2; widows: 2; }
+
+  /* A table that continues overleaf repeats its header, so the second page's
+     columns are still identified. `display: table-header-group` above does the
+     repeating; this keeps the header off the very bottom of a page. */
+  thead { break-after: avoid; page-break-after: avoid; }
+{% endif %}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div class="eyebrow">Design for Manufacturability · Analysis Report</div>
+    <h1>{{ analysis.file_name }}</h1>
+    <p class="subtitle">
+      {{ analysis.process_family }}{% if analysis.material %} · {{ analysis.material }}{% endif %}
+    </p>
+    <div class="facts">
+      <div class="fact"><span class="k">Analysed</span><span class="v">{{ created_display }}</span></div>
+      <div class="fact"><span class="k">Faces measured</span><span class="v">{{ metadata.face_count or '—' }}</span></div>
+      <div class="fact"><span class="k">Source units</span><span class="v">{{ metadata.source_units or 'unknown' }}</span></div>
+      <div class="fact">
+        <span class="k">Open findings</span>
+        <span class="v">{{ open_findings }}</span>
+      </div>
+    </div>
+  </header>
+
+  {# --- Verdict + AI summary --- #}
+  <section>
+    <h2>Assessment</h2>
+    {% if summary and summary.headline %}
+    <div class="verdict {{ 'fail' if open_findings else 'pass' }}">
+      <div class="headline">{{ summary.headline }}</div>
+      <p>{{ summary.assessment }}</p>
+      <div class="attribution">
+        Written by a language model from the measurements below. Advisory — it
+        does not decide any verdict.
+      </div>
+    </div>
+    {% else %}
+    <div class="verdict {{ 'fail' if open_findings else 'pass' }}">
+      <div class="headline">
+        {% if open_findings %}
+        {{ open_findings }} open finding{{ '' if open_findings == 1 else 's' }} require attention.
+        {% else %}
+        No failures among the checks that produced a verdict.
+        {% endif %}
+      </div>
+      <p class="muted">
+        No written summary is available for this run — either the interpretive
+        layer was not configured, or it returned nothing usable. Every
+        measurement and verdict below is unaffected: they are computed, and
+        never depended on it.
+      </p>
+    </div>
+    {% endif %}
+
+    {% if summary and summary.headline and summary.key_risks %}
+    <h3>Priority risks</h3>
+    {% for risk in summary.key_risks %}
+    <div class="risk {{ risk.severity }}">
+      <div class="t">{{ risk.title }} <span class="pill s-{{ 'noncompliant' if risk.severity == 'critical' else 'needsreview' }}">{{ risk.severity }}</span></div>
+      <div class="w">{{ risk.why_it_matters }}</div>
+      <div class="r">→ {{ risk.recommendation }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </section>
+
+  {# --- Charts --- #}
+  {# --- How the part was read --- #}
+  {% if classification %}
+  <section>
+    <h2>How this part was read</h2>
+    {% if classification.reading and classification.reading.reading %}
+    <p>{{ classification.reading.reading }}</p>
+    {% if classification.reading.caveat %}
+    <p class="muted"><em>{{ classification.reading.caveat }}</em></p>
+    {% endif %}
+    {% endif %}
+
+    {% for note in classification.notes %}
+    <div class="note"><p>{{ note }}</p></div>
+    {% endfor %}
+
+    <table>
+      <colgroup>
+        <col style="width:26%"><col style="width:16%"><col style="width:58%">
+      </colgroup>
+      <thead>
+        <tr><th>Rule set</th><th>Reading</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        {% for candidate in classification.candidates %}
+        {% if candidate.process_family in classification.families_to_analyse %}
+        <tr>
+          <td class="rule">{{ candidate.process_family }}</td>
+          <td>{{ candidate.confidence }}{% if candidate.basis == 'detected' %}
+            <div class="muted">scored {{ (candidate.score * 100) | round | int }}%</div>{% endif %}</td>
+          <td class="muted">
+            {% for reason in candidate.evidence_for[:2] %}{{ reason }}{% if not loop.last %}; {% endif %}{% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted">
+      The process is read from the geometry, never from the file name or any
+      annotation in it. Every rule set above was checked; the sections that
+      follow report each one separately, so a reading that turns out to be wrong
+      costs a section nobody reads rather than a defect nobody sees.
+    </p>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2>At a glance</h2>
+
+    {% if charts.status %}
+    <div class="chart">
+      <div class="chart-title">Findings by status</div>
+      {{ charts.status | safe }}
+    </div>
+    {% endif %}
+
+    {% if charts.severity %}
+    <div class="chart">
+      <div class="chart-title">Open findings by severity</div>
+      {{ charts.severity | safe }}
+    </div>
+    {% endif %}
+
+    {% if charts.coverage %}
+    <div class="chart">
+      <div class="chart-title">Rule coverage</div>
+      {{ charts.coverage | safe }}
+    </div>
+    {% endif %}
+
+    {% if summary and summary.coverage_note %}
+    <div class="note"><p>{{ summary.coverage_note }}</p></div>
+    {% endif %}
+  </section>
+
+  {# --- Measurement distributions --- #}
+  {% if charts.distributions %}
+  <section>
+    <h2>Measurements against their limits</h2>
+    <p class="muted">
+      Each mark is one measured face. Green shading is the acceptable band; a
+      mark outside it is a finding. This shows not just that a rule was broken
+      but by how much.
+    </p>
+    {% for svg in charts.distributions %}
+    <div class="chart">{{ svg | safe }}</div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {# --- Rule pattern --- #}
+  {% if charts.rules %}
+  <section>
+    <h2>Where the findings concentrate</h2>
+    <p class="muted">
+      One rule failing across many faces is a single design decision, not many
+      separate problems.
+    </p>
+    <div class="chart">{{ charts.rules | safe }}</div>
+  </section>
+  {% endif %}
+
+  {# --- Findings table --- #}
+  {% if sections %}
+  {% for section in sections %}
+  <section class="{{ 'page-break' if for_pdf else '' }}">
+    <h2>{{ section.process_family }}</h2>
+    <p class="muted">
+      {{ section.open }} open finding{{ '' if section.open == 1 else 's' }}
+      {%- if section.confidence %} · read as {{ section.confidence }}{% endif %}
+      {%- if section.why %} · {{ section.why[0] }}{% endif %}
+    </p>
+    <table>
+      <colgroup>
+        <col style="width:46%"><col style="width:15%">
+        <col style="width:15%"><col style="width:24%">
+      </colgroup>
+      <thead>
+        <tr><th>Rule</th><th>Status</th><th>Measured</th><th>Where</th></tr>
+      </thead>
+      <tbody>
+        {% for row in section.rows %}
+        {% if row.status != 'NOT_EVALUATED' %}
+        <tr>
+          <td class="rule">
+            {{ row.rule_id }}
+            {% if row.severity %}<span class="muted">· {{ row.severity }}</span>{% endif %}
+            <div class="muted" style="font-weight:400">{{ row.rule_name }}</div>
+            {% if row.commentary %}<div class="commentary">{{ row.commentary }}</div>{% endif %}
+          </td>
+          <td>
+            <span class="pill s-{{ row.status | lower | replace('-', '') | replace('_', '') }}">
+              {{ row.status | replace('_', ' ') | title }}
+            </span>
+            {% if row.count > 1 %}<div class="muted">{{ row.count }} features</div>{% endif %}
+          </td>
+          <td class="num">{{ row.measurement_summary or '—' }}</td>
+          <td class="muted">{{ row.location_summary }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+  {% else %}
+  <section class="{{ 'page-break' if for_pdf else '' }}">
+    <h2>Findings</h2>
+    <table>
+      <colgroup>
+        <col style="width:46%"><col style="width:15%">
+        <col style="width:15%"><col style="width:24%">
+      </colgroup>
+      <thead>
+        <tr><th>Rule</th><th>Status</th><th>Measured</th><th>Where</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% if row.status != 'NOT_EVALUATED' %}
+        <tr>
+          <td class="rule">
+            {{ row.rule_id }}
+            {% if row.severity %}<span class="muted">· {{ row.severity }}</span>{% endif %}
+            <div class="muted" style="font-weight:400">{{ row.rule_name }}</div>
+            {% if row.commentary %}
+            <div class="commentary">{{ row.commentary }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="pill s-{{ row.status | lower | replace('-', '') | replace('_', '') }}">
+              {{ row.status | replace('_', ' ') | title }}
+            </span>
+            {% if row.count > 1 %}<div class="muted">{{ row.count }} features</div>{% endif %}
+          </td>
+          <td class="num">{{ row.measurement_summary or '—' }}</td>
+          <td class="muted">{{ row.location_summary }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  {# --- Not evaluated --- #}
+  {% set skipped = rows | selectattr('status', 'equalto', 'NOT_EVALUATED') | list %}
+  {% if skipped %}
+  <section>
+    <h2>Not evaluated — and why</h2>
+    <p class="muted">
+      These rules did not produce a verdict. Listing them, with the reason, is
+      what makes the coverage figure above verifiable rather than a claim.
+    </p>
+    <table>
+      <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
+      <thead><tr><th>Rule</th><th>Reason not evaluated</th></tr></thead>
+      <tbody>
+        {% for row in skipped %}
+        <tr>
+          <td class="rule">{{ row.rule_id }}<div class="muted" style="font-weight:400">{{ row.rule_name }}</div></td>
+          <td>{{ row.reason or 'no reason recorded' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  {# --- Validation --- #}
+  <section>
+    <h2>Internal consistency check</h2>
+    {% if validation_issues %}
+    <p>The engine flagged {{ validation_issues | length }} issue(s) with its own output:</p>
+    <table>
+      <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
+      <thead><tr><th>Rule</th><th>Issue</th></tr></thead>
+      <tbody>
+        {% for issue in validation_issues %}
+        <tr><td class="rule">{{ issue.finding }}</td><td>{{ issue.issue }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">
+      No contradictions, unsupported verdicts, or unexplained gaps were found in
+      this report.
+    </p>
+    {% endif %}
+  </section>
+
+  {# --- Provenance --- #}
+  <section>
+    <h2>How to read this report</h2>
+    <div class="note">
+      <p>
+        <strong>Measurements and verdicts are computed</strong> from the CAD
+        geometry by a geometry kernel and compared against numeric thresholds —
+        repeatable, and identical on every run of the same file.
+        <strong>Commentary and the assessment above are written by a language
+        model</strong> from those measurements. The model is never able to set
+        or change a verdict. Where a rule could not be evaluated, this report
+        says so rather than implying it passed.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    Generated {{ generated_at }} · analysis #{{ analysis.id }} ·
+    Dyson DFX Design-Review POC
+  </footer>
+
+</div>
+</body>
+</html>
