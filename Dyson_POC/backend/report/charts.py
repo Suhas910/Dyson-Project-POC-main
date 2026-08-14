@@ -191,60 +191,158 @@ def coverage_bar(coverage: dict, width: int = 620) -> str:
 
 
 def top_rules(findings: Sequence[dict], limit: int = 8, width: int = 620) -> str:
-    """The rules generating the most findings, worst status first.
+    """Show the rules where findings concentrate.
 
-    Answers "what is the pattern" — one rule failing across thirty faces is a
-    systematic design decision, not thirty separate problems.
+    Each rule appears only once. Findings are aggregated by rule_id rather
+    than by (rule_id, status), so the same rule cannot create duplicate bars.
+    Long rule names are wrapped onto two lines.
     """
-    rank = {"NON-COMPLIANT": 0, "ERROR": 1, "NEEDS_REVIEW": 2}
-    grouped: dict[tuple, dict] = {}
+    rank = {
+        "NON-COMPLIANT": 0,
+        "ERROR": 1,
+        "NEEDS_REVIEW": 2,
+    }
+
+    grouped: dict[str, dict] = {}
+
     for finding in findings:
         status = finding.get("status")
+
         if status not in rank:
             continue
-        key = (finding.get("rule_id"), status)
-        entry = grouped.setdefault(
-            key,
-            {
-                "rule_id": finding.get("rule_id"),
+
+        rule_id = finding.get("rule_id")
+
+        if not rule_id:
+            continue
+
+        if rule_id not in grouped:
+            grouped[rule_id] = {
+                "rule_id": rule_id,
                 "name": finding.get("rule_name", ""),
                 "status": status,
                 "count": 0,
-            },
-        )
+            }
+
+        entry = grouped[rule_id]
         entry["count"] += 1
 
+        # Keep the worst status for the rule.
+        if rank[status] < rank[entry["status"]]:
+            entry["status"] = status
+
     rows = sorted(
-        grouped.values(), key=lambda r: (rank[r["status"]], -r["count"])
+        grouped.values(),
+        key=lambda r: (
+            rank[r["status"]],
+            -r["count"],
+        ),
     )[:limit]
+
     if not rows:
         return ""
 
-    label_w = 210
+    label_w = 350
     plot_w = width - label_w - 44
-    row_h, gap = 22, 7
+
+    # Two-line rows need more vertical space.
+    row_h = 34
+    gap = 8
+
     biggest = max(r["count"] for r in rows)
 
     parts = []
     y = 14
+
     for row in rows:
         colour, tint = STATUS_COLOURS[row["status"]]
+
         bar_w = max(plot_w * row["count"] / biggest, 2)
+
         name = row["name"]
-        if len(name) > 30:
-            name = name[:29] + "…"
-        parts.append(_text(0, y + 14, row["rule_id"], size=10.5,
-                           colour=colour, weight="700", mono=True))
-        parts.append(_text(56, y + 14, name, size=11, colour=INK_MUTED))
-        parts.append(f'<rect x="{label_w}" y="{y + 3}" width="{plot_w}" '
-                     f'height="{row_h - 6}" rx="3" fill="{tint}"/>')
-        parts.append(f'<rect x="{label_w}" y="{y + 3}" width="{bar_w:.1f}" '
-                     f'height="{row_h - 6}" rx="3" fill="{colour}"/>')
-        parts.append(_text(label_w + plot_w + 8, y + 14, row["count"],
-                           size=11, colour=INK, weight="700", mono=True))
+
+        # Wrap long rule names into two lines.
+        if len(name) > 45:
+            split_at = name.rfind(" ", 0, 45)
+
+            if split_at <= 0:
+                split_at = 45
+
+            name_line_1 = name[:split_at]
+            name_line_2 = name[split_at:].strip()
+        else:
+            name_line_1 = name
+            name_line_2 = ""
+
+        # Rule ID aligned with the first line.
+        parts.append(
+            _text(
+                0,
+                y + 12,
+                row["rule_id"],
+                size=10.5,
+                colour=colour,
+                weight="700",
+                mono=True,
+            )
+        )
+
+        # First line of rule name.
+        parts.append(
+            _text(
+                56,
+                y + 12,
+                name_line_1,
+                size=11,
+                colour=INK_MUTED,
+            )
+        )
+
+        # Second line, if required.
+        if name_line_2:
+            parts.append(
+                _text(
+                    56,
+                    y + 26,
+                    name_line_2,
+                    size=10.5,
+                    colour=INK_MUTED,
+                )
+            )
+
+        # Background bar.
+        parts.append(
+            f'<rect x="{label_w}" y="{y + 5}" width="{plot_w}" '
+            f'height="12" rx="3" fill="{tint}"/>'
+        )
+
+        # Actual finding-count bar.
+        parts.append(
+            f'<rect x="{label_w}" y="{y + 5}" width="{bar_w:.1f}" '
+            f'height="12" rx="3" fill="{colour}"/>'
+        )
+
+        # Count.
+        parts.append(
+            _text(
+                label_w + plot_w + 8,
+                y + 15,
+                row["count"],
+                size=11,
+                colour=INK,
+                weight="700",
+                mono=True,
+            )
+        )
+
         y += row_h + gap
 
-    return _svg(width, y + 4, "".join(parts), "Findings by rule")
+    return _svg(
+        width,
+        y + 4,
+        "".join(parts),
+        "Findings by rule",
+    )
 
 
 def measurement_against_limit(

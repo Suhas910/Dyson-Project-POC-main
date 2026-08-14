@@ -195,7 +195,14 @@
   /* No `nowrap` here: this cell holds the rule name and the commentary, which
      are prose and must wrap. Only genuinely short values keep nowrap. */
   td.rule { color: var(--ink); font-weight: 650; }
-  td.num { font-family: var(--mono); white-space: nowrap; color: var(--ink); }
+ td.num {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  color: var(--ink);
+}
 
   .pill {
     display: inline-block; font-family: var(--mono);
@@ -217,6 +224,16 @@
   .commentary::before { content: "AI · "; font-style: normal; font-family: var(--mono); color: var(--blue); font-size: 0.85em; }
 
   .muted { color: var(--ink-faint); }
+  .measurement-point {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 0.72em;
+  line-height: 1.35;
+  color: var(--ink-faint);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
   .note {
     border: 1px solid var(--border); border-left: 3px solid var(--violet);
     background: var(--violet-tint); border-radius: 6px;
@@ -440,8 +457,10 @@
     </p>
     <table>
       <colgroup>
-        <col style="width:46%"><col style="width:15%">
-        <col style="width:15%"><col style="width:24%">
+        <col style="width:44%">
+<col style="width:15%">
+<col style="width:20%">
+<col style="width:21%">
       </colgroup>
       <thead>
         <tr><th>Rule</th><th>Status</th><th>Measured</th><th>Where</th></tr>
@@ -462,8 +481,19 @@
             </span>
             {% if row.count > 1 %}<div class="muted">{{ row.count }} features</div>{% endif %}
           </td>
-          <td class="num">{{ row.measurement_summary or '—' }}</td>
-          <td class="muted">{{ row.location_summary }}</td>
+          <td class="num" style="vertical-align:top;">
+  {{ row.measurement_summary or '—' }}
+
+  {% if row.measurement_point_summary %}
+  <div class="measurement-point">
+    X: {{ "%.3f"|format(row.measurement_point_summary[0]) }},
+    Y: {{ "%.3f"|format(row.measurement_point_summary[1]) }},
+    Z: {{ "%.3f"|format(row.measurement_point_summary[2]) }}
+  </div>
+  {% endif %}
+</td>
+
+<td class="muted">{{ row.location_summary }}</td>
         </tr>
         {% endif %}
         {% endfor %}
@@ -476,8 +506,10 @@
     <h2>Findings</h2>
     <table>
       <colgroup>
-        <col style="width:46%"><col style="width:15%">
-        <col style="width:15%"><col style="width:24%">
+        <col style="width:44%">
+<col style="width:15%">
+<col style="width:20%">
+<col style="width:21%">
       </colgroup>
       <thead>
         <tr><th>Rule</th><th>Status</th><th>Measured</th><th>Where</th></tr>
@@ -500,8 +532,19 @@
             </span>
             {% if row.count > 1 %}<div class="muted">{{ row.count }} features</div>{% endif %}
           </td>
-          <td class="num">{{ row.measurement_summary or '—' }}</td>
-          <td class="muted">{{ row.location_summary }}</td>
+          <td class="num">
+  {{ row.measurement_summary or '—' }}
+
+  {% if row.measurement_point_summary %}
+  <div class="measurement-point">
+    X: {{ "%.3f"|format(row.measurement_point_summary[0]) }},
+    Y: {{ "%.3f"|format(row.measurement_point_summary[1]) }},
+    Z: {{ "%.3f"|format(row.measurement_point_summary[2]) }}
+  </div>
+  {% endif %}
+</td>
+
+<td class="muted">{{ row.location_summary }}</td>
         </tr>
         {% endif %}
         {% endfor %}

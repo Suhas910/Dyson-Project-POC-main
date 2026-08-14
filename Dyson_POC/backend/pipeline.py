@@ -323,6 +323,8 @@ def _evaluate_rule_on_faces(
         # overridden for a range rule that fails on its upper bound.
         point_attribute = spec.attribute + "_point"
         measurement_point = getattr(face, point_attribute, None)
+        if measurement_point is None:
+                measurement_point = face.face_centroid
 
         status = "NEEDS_REVIEW"
         reason = None
@@ -366,6 +368,8 @@ def _evaluate_rule_on_faces(
                         elif maximum is not None and scaled_max > maximum:
                             max_point_attr = spec.interval_max_attribute + "_point"
                             measurement_point = getattr(face, max_point_attr, None)
+                            if measurement_point is None:
+                                measurement_point = face.face_centroid
         except Exception as exc:
             logging.error(
                 f"Error evaluating rule {rule['rule_id']} on face {face.face_id}: {exc}"
@@ -543,18 +547,25 @@ def run_analysis_pipeline(
     # covered.
     findings: list[Finding] = []
     coverage_by_family: dict[str, dict] = {}
+
     for family in selected_families:
         family_rules = [r for r in all_rules if r.get("process_family") == family]
         if not family_rules:
             continue
+
         family_findings, family_coverage = execute_rules(
             part_model, family_rules, family, material, blocked_rules
         )
+
         findings.extend(family_findings)
+
+
         coverage_by_family[family] = family_coverage.model_dump()
 
     coverage = _merge_coverage(coverage_by_family)
     logging.info(f"Execution complete. Generated {len(findings)} findings.")
+
+
 
     # --- Step 4: Interpret ---
     logging.info("Step 4: Interpreting findings that need review...")

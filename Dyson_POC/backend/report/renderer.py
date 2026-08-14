@@ -210,6 +210,7 @@ def _group_findings(findings: list[dict]) -> list[dict]:
                 "confidence": finding.get("agent_confidence"),
                 "locations": [],
                 "measurements": [],
+                "measurement_points": [],
             }
             grouped[key] = row
         # The feature name where geometry produced one, the face number where it
@@ -220,6 +221,9 @@ def _group_findings(findings: list[dict]) -> list[dict]:
             )
         if finding.get("measured"):
             row["measurements"].append(finding["measured"])
+
+        if finding.get("measurement_point"):
+           row["measurement_points"].append(finding["measurement_point"])
         # Carry the first commentary that exists for the group.
         if not row["commentary"] and finding.get("agent_commentary"):
             row["commentary"] = finding["agent_commentary"]
@@ -232,6 +236,7 @@ def _group_findings(findings: list[dict]) -> list[dict]:
         row["count"] = max(len(set(row["locations"])), 1)
         row["location_summary"] = _summarise(row["locations"])
         row["measurement_summary"] = _summarise_measurements(row["measurements"])
+        row["measurement_point_summary"] = row["measurement_points"][0] if row["measurement_points"] else None
         rows.append(row)
 
     rows.sort(key=lambda r: (
