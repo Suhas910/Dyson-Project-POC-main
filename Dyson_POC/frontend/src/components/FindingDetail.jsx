@@ -285,6 +285,15 @@ function FindingDetail({ finding, rule, open, onClose }) {
                   · {finding.location}
                 </Typography>
               )}
+              {finding.measurement_point && (
+                <Typography
+                  variant="body2"
+                  sx={{ fontFamily: "monospace", color: "text.secondary", mt: 0.5 }}
+                >
+                  At ({finding.measurement_point[0]}, {finding.measurement_point[1]},{" "}
+                  {finding.measurement_point[2]})
+                </Typography>
+              )}
             </Typography>
           </Section>
         )}

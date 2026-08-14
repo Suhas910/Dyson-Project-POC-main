@@ -26,7 +26,8 @@ class PartModelFace(BaseModel):
         None, description="Underlying surface: plane, cylinder, cone, sphere, torus."
     )
     feature_class: Optional[str] = Field(
-        None, description="What the face represents: hole, boss, internal_fillet, plane."
+        None,
+        description="What the face represents: hole, boss, internal_fillet, plane.",
     )
     face_normal: Optional[tuple[float, float, float]] = Field(
         None, description="Outward normal at the representative sample point."
@@ -63,6 +64,20 @@ class PartModelFace(BaseModel):
     draft_angle: Optional[float] = Field(
         None, description="Draft in degrees, 0 (vertical wall) to 90 (perpendicular)."
     )
+    # ── NEW: companion coordinates for critical measurements ──────────
+    wall_thickness_point: Optional[tuple[float, float, float]] = Field(
+        None,
+        description="XYZ of the thinnest sample. The point that produced wall_thickness.",
+    )
+    wall_thickness_max_point: Optional[tuple[float, float, float]] = Field(
+        None,
+        description="XYZ of the thickest sample. Used when a range rule tests the upper bound.",
+    )
+    draft_angle_point: Optional[tuple[float, float, float]] = Field(
+        None,
+        description="XYZ of the shallowest draft sample. The point that produced draft_angle.",
+    )
+
     is_perpendicular_to_pull: bool = Field(
         False, description="Flat top or bottom face; exempt from draft rules."
     )
@@ -127,6 +142,14 @@ class Finding(BaseModel):
         "the stable key that the 3D view and any external tool can match on.",
     )
     measured: Optional[str] = None
+    measurement_point: Optional[tuple[float, float, float]] = Field(
+        None,
+        description=(
+            "XYZ coordinate of the sample that produced the measured value. "
+            "Null for boolean flags (is_undercut), part-level rules, "
+            "and metrics like hole_diameter that have no single critical point."
+        ),
+    )
 
     severity: Optional[str] = Field(
         None, description="Rule severity from the catalog: critical, major, minor."

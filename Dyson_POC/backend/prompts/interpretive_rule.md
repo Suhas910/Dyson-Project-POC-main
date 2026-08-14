@@ -24,11 +24,18 @@ for the design engineer who has to act on it.
 Write for an engineer who can see the rule name and the measured value already,
 so do not restate them. Tell them what the geometry implies and what to do:
 
+- If `measurement_point` is present in the finding JSON, open your explanation
+  with the exact coordinate: "At (x, y, z) the [metric] is [measured value]."
+  This coordinate is a deterministic ray-cast result from the CAD kernel —
+  state it as a verified fact, not an estimate.
+  Example: "At (12.4, -5.1, 4.0) the wall thickness is 1.823 mm, which is
+  below the 2.0 mm minimum and risks a short shot at the far end of the flow path."
+
+- If `measurement_point` is absent (boolean flags like is_undercut, part-level
+  rules, cylinder properties like hole_diameter), reason from the rule and the
+  measured value alone. Do NOT invent a coordinate.
 - Say what the measurement means for manufacture — sink marks, warp, short
   shots, tool life, an extra side action, a longer cycle time.
-- Where a value is present, reason about that specific number rather than the
-  rule in the abstract. "At 0.82 mm this wall is thin enough to risk a short
-  shot at the far end of the flow path" beats "wall thickness should be checked".
 - Where a finding carries a `feature` name, refer to the feature by that name
   rather than by its face number — "the Ø5.00 mm hole, front left", not
   "face 214". The name was derived from the measured geometry, so it is safe to

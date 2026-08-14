@@ -109,9 +109,7 @@ def _format_measurement(
     if spec.is_boolean:
         return "yes" if value else "no"
 
-    suffix = {"mm": " mm", "deg": "°", "ratio": "×", "": ""}.get(
-        spec.unit, ""
-    )
+    suffix = {"mm": " mm", "deg": "°", "ratio": "×", "": ""}.get(spec.unit, "")
     if (
         value_max is not None
         and spec.interval_max_attribute
@@ -205,9 +203,7 @@ def execute_rules(
             rule_id, process_family, material
         )
         if not material_applies:
-            findings.append(
-                _part_level_finding(rule, "NOT_EVALUATED", material_reason)
-            )
+            findings.append(_part_level_finding(rule, "NOT_EVALUATED", material_reason))
             continue
         coverage.rules_after_material_filter += 1
 
@@ -260,7 +256,9 @@ def execute_rules(
             coverage.rules_not_computable += 1
             continue
 
-        divisor, reference_problem = _resolve_reference(spec.reference, nominal_thickness)
+        divisor, reference_problem = _resolve_reference(
+            spec.reference, nominal_thickness
+        )
         if reference_problem:
             findings.append(
                 _part_level_finding(rule, "NOT_EVALUATED", reference_problem)
@@ -320,6 +318,12 @@ def _evaluate_rule_on_faces(
         if spec.interval_max_attribute:
             value_max = getattr(face, spec.interval_max_attribute, None)
 
+        # Convention: companion point is attribute + "_point"
+        # Start with the point for the primary (min) value. This will be
+        # overridden for a range rule that fails on its upper bound.
+        point_attribute = spec.attribute + "_point"
+        measurement_point = getattr(face, point_attribute, None)
+
         status = "NEEDS_REVIEW"
         reason = None
         measured = None
@@ -349,10 +353,22 @@ def _evaluate_rule_on_faces(
                     )
                 else:
                     status = "NON-COMPLIANT"
+
+                    # For a range rule, determine which bound was violated and
+                    # attach the corresponding point.
+                    if predicate.get("type") == "range" and scaled_max is not None:
+                        minimum = predicate.get("min")
+                        maximum = predicate.get("max")
+                        # Check lower bound first. If both fail, the minimum is
+                        # the more critical failure.
+                        if minimum is not None and value < minimum:
+                            pass  # The default point is correct
+                        elif maximum is not None and scaled_max > maximum:
+                            max_point_attr = spec.interval_max_attribute + "_point"
+                            measurement_point = getattr(face, max_point_attr, None)
         except Exception as exc:
             logging.error(
-                f"Error evaluating rule {rule['rule_id']} on face "
-                f"{face.face_id}: {exc}"
+                f"Error evaluating rule {rule['rule_id']} on face {face.face_id}: {exc}"
             )
             status = "ERROR"
             reason = f"predicate evaluation failed: {exc}"
@@ -367,6 +383,7 @@ def _evaluate_rule_on_faces(
                 location=f"face {face.face_id}",
                 feature_label=face.label,
                 measured=measured,
+                measurement_point=measurement_point,
                 severity=rule.get("severity"),
                 category=rule.get("category"),
                 reason=reason,
@@ -527,9 +544,7 @@ def run_analysis_pipeline(
     findings: list[Finding] = []
     coverage_by_family: dict[str, dict] = {}
     for family in selected_families:
-        family_rules = [
-            r for r in all_rules if r.get("process_family") == family
-        ]
+        family_rules = [r for r in all_rules if r.get("process_family") == family]
         if not family_rules:
             continue
         family_findings, family_coverage = execute_rules(
@@ -558,7 +573,8 @@ def run_analysis_pipeline(
                 "why": c.evidence_for[:3],
             }
             for c in classification.candidates
-            if c.basis == "detected" and c.score >= process_classifier.ANALYSIS_THRESHOLD
+            if c.basis == "detected"
+            and c.score >= process_classifier.ANALYSIS_THRESHOLD
         ]
 
     client = llm_client if llm_client is not None else llm_provider.get_client()

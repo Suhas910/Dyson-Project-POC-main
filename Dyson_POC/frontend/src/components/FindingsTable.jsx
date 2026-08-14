@@ -56,6 +56,7 @@ const COLUMNS = [
   { id: "severity", label: "Severity", sortable: true },
   { id: "status", label: "Status", sortable: true },
   { id: "feature_label", label: "Feature", sortable: true },
+  { id: "measurement_point", label: "Location (XYZ)", sortable: false },
   { id: "measured", label: "Measured", sortable: true },
   { id: "reason", label: "Notes", sortable: false },
   { id: "agent_commentary", label: "AI Commentary", sortable: false },
@@ -103,6 +104,7 @@ function exportToCSV(findings) {
     "Status",
     "Feature",
     "Location",
+    "Location (XYZ)",
     "Measured",
     "Notes",
     "AI Commentary",
@@ -116,6 +118,9 @@ function exportToCSV(findings) {
     f.status,
     f.feature_label || "",
     f.location,
+    f.measurement_point
+      ? `(${f.measurement_point[0]}, ${f.measurement_point[1]}, ${f.measurement_point[2]})`
+      : "N/A",
     f.measured || "N/A",
     f.reason || "",
     f.agent_commentary || "N/A",
@@ -124,7 +129,7 @@ function exportToCSV(findings) {
 
   const csvContent = [headers, ...rows]
     .map((row) =>
-      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
     )
     .join("\n");
 
@@ -175,7 +180,7 @@ function FindingsTable({ findings, versionId, rules = [] }) {
           (f.feature_label && f.feature_label.toLowerCase().includes(q)) ||
           (f.guideline_ref && f.guideline_ref.toLowerCase().includes(q)) ||
           (f.measured && f.measured.toLowerCase().includes(q)) ||
-          (f.agent_commentary && f.agent_commentary.toLowerCase().includes(q))
+          (f.agent_commentary && f.agent_commentary.toLowerCase().includes(q)),
       );
     }
 
@@ -222,12 +227,12 @@ function FindingsTable({ findings, versionId, rules = [] }) {
 
   const paginatedFindings = filteredFindings.slice(
     page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
+    page * rowsPerPage + rowsPerPage,
   );
 
   const rulesById = useMemo(
     () => new Map(rules.map((rule) => [rule.rule_id, rule])),
-    [rules]
+    [rules],
   );
 
   const families = useMemo(() => {
@@ -325,7 +330,11 @@ function FindingsTable({ findings, versionId, rules = [] }) {
                 variant="outlined"
                 startIcon={<ArticleOutlinedIcon />}
                 onClick={() =>
-                  window.open(`/api/report/${versionId}.html`, "_blank", "noopener")
+                  window.open(
+                    `/api/report/${versionId}.html`,
+                    "_blank",
+                    "noopener",
+                  )
                 }
                 sx={{ mr: 1, whiteSpace: "nowrap" }}
               >
@@ -338,7 +347,11 @@ function FindingsTable({ findings, versionId, rules = [] }) {
                 variant="contained"
                 startIcon={<PictureAsPdfIcon />}
                 onClick={() =>
-                  window.open(`/api/report/${versionId}.pdf`, "_blank", "noopener")
+                  window.open(
+                    `/api/report/${versionId}.pdf`,
+                    "_blank",
+                    "noopener",
+                  )
                 }
                 sx={{ mr: 1, whiteSpace: "nowrap" }}
               >
@@ -459,7 +472,10 @@ function FindingsTable({ findings, versionId, rules = [] }) {
                       }),
                     }}
                   >
-                    <TableCell sx={clickable} onClick={() => setDetail(finding)}>
+                    <TableCell
+                      sx={clickable}
+                      onClick={() => setDetail(finding)}
+                    >
                       <Chip
                         label={finding.rule_id}
                         size="small"
@@ -472,7 +488,10 @@ function FindingsTable({ findings, versionId, rules = [] }) {
                         }}
                       />
                     </TableCell>
-                    <TableCell sx={clickable} onClick={() => setDetail(finding)}>
+                    <TableCell
+                      sx={clickable}
+                      onClick={() => setDetail(finding)}
+                    >
                       <Tooltip title="Why did this come out this way?" arrow>
                         <Box
                           component="span"
@@ -495,10 +514,16 @@ function FindingsTable({ findings, versionId, rules = [] }) {
                         </Box>
                       </Tooltip>
                     </TableCell>
-                    <TableCell sx={clickable} onClick={() => setDetail(finding)}>
+                    <TableCell
+                      sx={clickable}
+                      onClick={() => setDetail(finding)}
+                    >
                       {getSeverityChip(finding.severity)}
                     </TableCell>
-                    <TableCell sx={clickable} onClick={() => setDetail(finding)}>
+                    <TableCell
+                      sx={clickable}
+                      onClick={() => setDetail(finding)}
+                    >
                       {getStatusChip(finding.status)}
                     </TableCell>
                     <TableCell>
@@ -511,6 +536,22 @@ function FindingsTable({ findings, versionId, rules = [] }) {
                           {finding.feature_label || finding.location}
                         </Typography>
                       </Tooltip>
+                    </TableCell>
+                    <TableCell>
+                      {finding.measurement_point ? (
+                        <Typography
+                          variant="body2"
+                          sx={{ fontFamily: "monospace" }}
+                        >
+                          ({finding.measurement_point[0]},{" "}
+                          {finding.measurement_point[1]},{" "}
+                          {finding.measurement_point[2]})
+                        </Typography>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          N/A
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell>
                       {finding.measured || (

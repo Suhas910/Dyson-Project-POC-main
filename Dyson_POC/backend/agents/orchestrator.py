@@ -154,7 +154,9 @@ def _span_payload(group: list[Finding]) -> dict:
     return span
 
 
-def _finding_payload(index: int, finding: Finding, group: Optional[list] = None) -> dict:
+def _finding_payload(
+    index: int, finding: Finding, group: Optional[list] = None
+) -> dict:
     """Describes one finding to the model.
 
     Carries the measurement and the reason, not just the rule name. Commentary
@@ -177,6 +179,9 @@ def _finding_payload(index: int, finding: Finding, group: Optional[list] = None)
         payload["feature"] = finding.feature_label
     if finding.measured:
         payload["measured"] = finding.measured
+    if finding.measurement_point:  # only add when we actually have it
+        pt = finding.measurement_point
+        payload["measurement_point"] = {"x": pt[0], "y": pt[1], "z": pt[2]}
     if finding.severity:
         payload["severity"] = finding.severity
     if finding.category:
@@ -287,7 +292,9 @@ def _group_for_commentary(targets: list[Finding]) -> list[list[Finding]]:
     """
     grouped: dict[tuple, list[Finding]] = {}
     for finding in targets:
-        grouped.setdefault((finding.process_family, finding.rule_id), []).append(finding)
+        grouped.setdefault((finding.process_family, finding.rule_id), []).append(
+            finding
+        )
     return list(grouped.values())
 
 
@@ -301,8 +308,7 @@ def _request_commentary(
     # Index within the batch, so the model never sees (and cannot mis-echo) an
     # index that maps outside the batch it was given.
     payload = [
-        _finding_payload(i, f, (groups or {}).get(id(f)))
-        for i, f in enumerate(batch)
+        _finding_payload(i, f, (groups or {}).get(id(f))) for i, f in enumerate(batch)
     ]
     prompt = load_prompt(
         "interpretive_rule.md",

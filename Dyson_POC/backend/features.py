@@ -132,7 +132,10 @@ def classify_surface(face: TopoDS_Face) -> str:
 
 
 def _classify_grid(
-    face: TopoDS_Face, bounds: tuple[float, float, float, float], grid: int, tolerance: float
+    face: TopoDS_Face,
+    bounds: tuple[float, float, float, float],
+    grid: int,
+    tolerance: float,
 ) -> list[tuple[float, float]]:
     """Returns the cell-centre points of a grid that lie inside the trimmed face."""
     umin, umax, vmin, vmax = bounds
@@ -185,9 +188,7 @@ def interior_uv_samples(
             # hundreds of rays; an even stride keeps the samples spread out.
             if len(inside) > MAX_SAMPLES_PER_FACE:
                 stride = len(inside) / MAX_SAMPLES_PER_FACE
-                inside = [
-                    inside[int(k * stride)] for k in range(MAX_SAMPLES_PER_FACE)
-                ]
+                inside = [inside[int(k * stride)] for k in range(MAX_SAMPLES_PER_FACE)]
             return inside
 
     return []
@@ -493,8 +494,12 @@ def cylinder_axis_key(face: TopoDS_Face) -> tuple | None:
 
     return (
         round(cylinder.Radius(), 4),
-        round(dx, 4), round(dy, 4), round(dz, 4),
-        round(location.X(), 3), round(location.Y(), 3), round(location.Z(), 3),
+        round(dx, 4),
+        round(dy, 4),
+        round(dz, 4),
+        round(location.X(), 3),
+        round(location.Y(), 3),
+        round(location.Z(), 3),
     )
 
 
@@ -571,9 +576,7 @@ def _shape_diagonal(shape: TopoDS_Shape) -> float:
     if bbox.IsVoid():
         return 1.0
     xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
-    diagonal = math.sqrt(
-        (xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2
-    )
+    diagonal = math.sqrt((xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2)
     return diagonal if diagonal > 0 else 1.0
 
 
@@ -629,8 +632,10 @@ def build_part_model(
             unmeasurable += 1
             faces.append(
                 PartModelFace(
-                    face_id=face_id, surface_type="tessellated",
-                    feature_class="tessellated", sample_count=0,
+                    face_id=face_id,
+                    surface_type="tessellated",
+                    feature_class="tessellated",
+                    sample_count=0,
                 )
             )
             continue
@@ -638,8 +643,8 @@ def build_part_model(
         surface_type = classify_surface(face)
         samples = interior_uv_samples(face)
 
-        draft_angles: list[float] = []
-        thicknesses: list[float] = []
+        draft_samples: list[tuple[float, tuple]] = []
+        thickness_samples: list[tuple[float, tuple]] = []
         occluded_samples = 0
         representative_normal: tuple[float, float, float] | None = None
 
@@ -649,6 +654,8 @@ def build_part_model(
             if normal is None or point is None:
                 continue
 
+            xyz = (round(point.X(), 3), round(point.Y(), 3), round(point.Z(), 3))
+
             if representative_normal is None:
                 representative_normal = (
                     float(normal.X()),
@@ -656,13 +663,13 @@ def build_part_model(
                     float(normal.Z()),
                 )
 
-            draft_angles.append(calculate_draft_angle(normal, pull_direction))
+            draft_samples.append((calculate_draft_angle(normal, pull_direction), xyz))
 
             thickness = measure_thickness_at(
                 intersector, face, point, normal.Reversed()
             )
             if thickness is not None:
-                thicknesses.append(thickness)
+                thickness_samples.append((thickness, xyz))
 
             # Undercut is a boolean: one blocked sample settles it. Testing the
             # rest costs a ray cast each and cannot change the answer, and on a
@@ -679,10 +686,26 @@ def build_part_model(
 
         # Worst case drives the verdict: a wall is too thin if it is too thin
         # anywhere, and a face lacks draft if any part of it does.
-        wall_thickness = min(thicknesses) if thicknesses else None
-        wall_thickness_max = max(thicknesses) if thicknesses else None
-        wall_thickness_median = median(thicknesses) if thicknesses else None
-        draft_angle = min(draft_angles) if draft_angles else None
+        wall_thickness = (
+            min(t for t, _ in thickness_samples) if thickness_samples else None
+        )
+        wall_thickness_max = (
+            max(t for t, _ in thickness_samples) if thickness_samples else None
+        )
+        wall_thickness_median = (
+            median(t for t, _ in thickness_samples) if thickness_samples else None
+        )
+        wall_thickness_point = (
+            min(thickness_samples, key=lambda x: x[0])[1] if thickness_samples else None
+        )
+        wall_thickness_max_point = (
+            max(thickness_samples, key=lambda x: x[0])[1] if thickness_samples else None
+        )
+
+        draft_angle = min(d for d, _ in draft_samples) if draft_samples else None
+        draft_angle_point = (
+            min(draft_samples, key=lambda x: x[0])[1] if draft_samples else None
+        )
 
         is_perpendicular_to_pull = (
             draft_angle is not None
@@ -692,7 +715,9 @@ def build_part_model(
 
         cylinder = calculate_cylindrical_properties(face, merged_cylinders.get(index))
         feature = cylinder.get("feature")
-        internal_radius = cylinder.get("radius") if cylinder.get("is_internal") else None
+        internal_radius = (
+            cylinder.get("radius") if cylinder.get("is_internal") else None
+        )
         external_radius = (
             cylinder.get("radius") if cylinder.get("is_internal") is False else None
         )
@@ -735,7 +760,10 @@ def build_part_model(
                 wall_thickness=wall_thickness,
                 wall_thickness_max=wall_thickness_max,
                 wall_thickness_median=wall_thickness_median,
+                wall_thickness_point=wall_thickness_point,
+                wall_thickness_max_point=wall_thickness_max_point,
                 draft_angle=draft_angle,
+                draft_angle_point=draft_angle_point,
                 is_perpendicular_to_pull=is_perpendicular_to_pull,
                 is_undercut=is_undercut,
                 hole_diameter=hole_diameter,
